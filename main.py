@@ -104,23 +104,15 @@ class DumpToCsv:
         df.to_csv(out_file, index=False)
         print(f"[OK] CSV exportado a: {out_file}")
         return out_file
-
 import os
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
 
-import os
-import pandas as pd
-from sklearn.cluster import KMeans
-
-import os
-import pandas as pd
-from sklearn.cluster import KMeans
-
 class KMeansReclusterCSV:
-    def __init__(self, input_csv, output_csv=None, random_state=0):
+    def __init__(self, input_csv, n_clusters, output_csv=None, random_state=0):
         self.input_csv = input_csv
+        self.n_clusters = n_clusters
         self.random_state = random_state
         base, _ = os.path.splitext(input_csv)
         self.output_csv = output_csv or f"{base}_reclustered.csv"
@@ -130,9 +122,8 @@ class KMeansReclusterCSV:
         self.df = pd.read_csv(self.input_csv)
 
     def apply_kmeans(self):
-        n_clusters = int(self.df['cluster'].nunique())
-        coords = self.df[['x', 'y', 'z']].values
-        kmeans = KMeans(n_clusters=n_clusters, init="k-means++", random_state=self.random_state).fit(coords)
+        coords = self.df[['x','y','z']].values
+        kmeans = KMeans(n_clusters=self.n_clusters, init="k-means++", random_state=self.random_state).fit(coords)
         self.df['cluster'] = kmeans.labels_ + 1
 
     def save(self):
@@ -152,9 +143,24 @@ class KMeansReclusterCSV:
             out_path = os.path.join(output_dir, f"cluster_{c}.csv")
             group.to_csv(out_path, index=False)
 
-
-
-
+    def compute_clusters_dispersion(self, clusters_dir=None):
+        base, _ = os.path.splitext(self.input_csv)
+        clusters_dir = clusters_dir or f"{base}_clusters"
+        results = {}
+        for fname in os.listdir(clusters_dir):
+            if fname.startswith('cluster_') and fname.endswith('.csv'):
+                path = os.path.join(clusters_dir, fname)
+                df = pd.read_csv(path)
+                coords = df[['x','y','z']].values
+                center = coords.mean(axis=0)
+                dists = np.linalg.norm(coords - center, axis=1)
+                dispersion = dists.mean()
+                cluster_id = int(fname.split('_')[1].split('.')[0])
+                results[cluster_id] = {
+                    'center_of_mass': center.tolist(),
+                    'dispersion': float(dispersion)
+                }
+        return results
 
 if __name__ == "__main__":
    
@@ -174,9 +180,12 @@ if __name__ == "__main__":
     converter.convert()
 
    
-    processor = KMeansReclusterCSV("out/csv/key_areas.csv", random_state=0)
+    processor = KMeansReclusterCSV("out/csv/key_areas.csv", n_clusters=5)
     processor.run()
-    processor.export_by_cluster()  
+    processor.export_by_cluster()
+    result =processor.compute_clusters_dispersion()
+    print(result)
+
 
 
 
